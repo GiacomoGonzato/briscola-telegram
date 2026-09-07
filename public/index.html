@@ -123,7 +123,7 @@
 
     function inviteFriend() {
       // Direct share link via Telegram
-      const botUser = tg?.initDataUnsafe?.bot?.username || "YOUR_BOT_USERNAME";
+      const botUser = tg?.initDataUnsafe?.bot?.username || "CardBiscaBot";
       const link = `https://t.me/share/url?url=https://t.me/${botUser}/briscola?startapp=${roomId}&text=Play%20Briscola%20with%20me!`;
       if (tg) { tg.openTelegramLink(link); }
       else { prompt("Copy invite link:", link); }
