@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Briscola</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      margin: 0; background: #1b4d2e; color: #fff;
+      font-family: Arial, sans-serif; text-align: center; user-select: none;
+    }
+    .card {
+      display: inline-block; width: 75px; height: 110px; margin: 5px;
+      background: #fff; color: #111; border-radius: 8px; font-weight: bold;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.4); vertical-align: top;
+      padding-top: 10px; cursor: pointer; box-sizing: border-box;
+    }
+    .card.trump { transform: rotate(90deg); margin: 20px; }
+    .btn {
+      background: #2481cc; color: white; border: none; padding: 12px 20px;
+      font-size: 16px; border-radius: 8px; cursor: pointer; margin-top: 15px;
+    }
+    #table-area { min-height: 130px; margin: 15px 0; }
+  </style>
+</head>
+<body>
+
+  <div id="lobby" style="padding-top: 50px;">
+    <h2>🃏 Briscola Telegram</h2>
+    <p id="status">Connecting to cloud server...</p>
+    <button class="btn" id="share-btn" style="display:none;" onclick="inviteFriend()">✉️ Invite Friend to Play</button>
+  </div>
+
+  <div id="game-board" style="display:none;">
+    <div>Opponent Points: <span id="opp-score">0</span></div>
+    
+    <div style="margin: 10px 0;">
+      Deck: <span id="deck-count">34</span>
+      <div id="trump-slot"></div>
+    </div>
+
+    <div id="table-area">
+      <div id="table-cards"></div>
+    </div>
+
+    <h3 id="turn-banner">Your Turn!</h3>
+    <div id="my-hand"></div>
+    <div>My Points: <span id="my-score">0</span></div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const socket = io();
+    let roomId = null;
+    let myIndex = null;
+    let isMyTurn = false;
+
+    // Read room ID from Telegram invite parameter or generate a random one
+    const startParam = tg?.initDataUnsafe?.start_param;
+    roomId = startParam ? startParam : 'table_' + Math.random().toString(36).substring(2, 7);
+
+    const playerName = tg?.initDataUnsafe?.user?.first_name || "Player";
+    socket.emit('joinRoom', { roomId, playerName });
+
+    socket.on('waiting', (msg) => {
+      document.getElementById('status').innerText = msg;
+      document.getElementById('share-btn').style.display = 'inline-block';
+    });
+
+    socket.on('gameState', (data) => {
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('game-board').style.display = 'block';
+
+      myIndex = data.myIndex;
+      isMyTurn = (data.turn === myIndex);
+
+      document.getElementById('deck-count').innerText = data.cardsLeft;
+      document.getElementById('my-score').innerText = data.scores[myIndex];
+      document.getElementById('opp-score').innerText = data.scores[1 - myIndex];
+      document.getElementById('turn-banner').innerText = isMyTurn ? "👉 Your Turn!" : "Waiting for opponent...";
+
+      // Display Briscola Card
+      document.getElementById('trump-slot').innerHTML = `
+        <div class="card trump">${data.briscola.name}<br><small>${data.briscola.suit}</small></div>
+      `;
+
+      // Display Player Cards
+      const handBox = document.getElementById('my-hand');
+      handBox.innerHTML = '';
+      data.myHand.forEach(card => {
+        const c = document.createElement('div');
+        c.className = 'card';
+        c.innerHTML = `${card.name}<br><small>${card.suit}</small><br>(${card.points}p)`;
+        c.onclick = () => {
+          if (isMyTurn) socket.emit('playCard', { roomId, cardId: card.id });
+        };
+        handBox.appendChild(c);
+      });
+
+      document.getElementById('table-cards').innerHTML = '';
+    });
+
+    socket.on('cardPlayed', ({ pIndex, card }) => {
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.innerHTML = `${card.name}<br><small>${card.suit}</small>`;
+      document.getElementById('table-cards').appendChild(c);
+    });
+
+    socket.on('turnChanged', ({ turn }) => {
+      isMyTurn = (turn === myIndex);
+      document.getElementById('turn-banner').innerText = isMyTurn ? "👉 Your Turn!" : "Waiting for opponent...";
+    });
+
+    socket.on('gameOver', ({ scores }) => {
+      alert(`Game Over!\nYou: ${scores[myIndex]} pts | Opponent: ${scores[1 - myIndex]} pts`);
+      location.reload();
+    });
+
+    function inviteFriend() {
+      // Direct share link via Telegram
+      const botUser = tg?.initDataUnsafe?.bot?.username || "YOUR_BOT_USERNAME";
+      const link = `https://t.me/share/url?url=https://t.me/${botUser}/briscola?startapp=${roomId}&text=Play%20Briscola%20with%20me!`;
+      if (tg) { tg.openTelegramLink(link); }
+      else { prompt("Copy invite link:", link); }
+    }
+  </script>
+</body>
+</html>
